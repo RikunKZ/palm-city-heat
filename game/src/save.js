@@ -1,8 +1,16 @@
-// save.js — the whole save system: one JSON blob in localStorage.
-// Saved on mission completion, on pause and every few seconds of play;
-// holds cash, respect, story progress and where the player left off.
+// The save file: cash, respect and story progress in localStorage, so a
+// player can close the tab and pick the city up where they left it.
+import { SAVE_KEY, PLAYER } from './config.js';
 
-import { SAVE_KEY } from './config.js';
+export function defaultSave() {
+  return {
+    cash: PLAYER.startCash,
+    respect: 0,
+    storyIndex: 0, // the next story mission to offer; 5 means the story is done
+    storyDone: false,
+    jobsDone: 0,
+  };
+}
 
 export function loadSave() {
   try {
@@ -10,28 +18,17 @@ export function loadSave() {
     if (!raw) return null;
     const data = JSON.parse(raw);
     if (typeof data !== 'object' || data === null) return null;
-    return data;
+    return { ...defaultSave(), ...data };
   } catch {
-    return null; // a corrupt save must never stop the game from starting
+    return null;
   }
 }
 
-export function writeSave(game) {
+export function storeSave(data) {
   try {
-    const anchor = game.player.group.position;
-    localStorage.setItem(
-      SAVE_KEY,
-      JSON.stringify({
-        cash: Math.round(game.cash),
-        respect: game.respect,
-        missionIndex: game.missions.index,
-        storyDone: game.missions.storyDone,
-        x: Math.round(anchor.x * 10) / 10,
-        z: Math.round(anchor.z * 10) / 10,
-      }),
-    );
+    localStorage.setItem(SAVE_KEY, JSON.stringify(data));
   } catch {
-    // storage full or blocked: play on without saving
+    // A browser that refuses storage just loses the save; the game goes on.
   }
 }
 
@@ -39,6 +36,6 @@ export function clearSave() {
   try {
     localStorage.removeItem(SAVE_KEY);
   } catch {
-    // nothing to clear
+    // Nothing to clear.
   }
 }

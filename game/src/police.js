@@ -1,194 +1,199 @@
-// police.js — the Palm City Police Department: the wanted system and its
-// response. Heat points from crimes set the star level; the level sets how
-// many units respond. Police cars pursue and ram, officers chase on foot,
-// and standing still next to either fills the busted meter.
-
+// The law in Palm City: a heat score behind the five stars, patrol cars
+// that hunt and ram, officers who pile out and chase on foot, and the
+// busted meter that fills while they have you cornered and slow.
 import { WANTED } from './config.js';
-import { clamp, randRange } from './random.js';
-import { collideCircle, randomRoadPoint } from './world.js';
-import { Car, wreckCar } from './vehicles.js';
-import { animateWalk, makeHumanoid } from './pedestrians.js';
-import { playerAnchor } from './player.js';
+import { clamp, angleDelta } from './random.js';
+import { Car } from './vehicles.js';
+import { makeHumanoid, animateWalk } from './pedestrians.js';
+import { randomRoadPoint, resolveCollisions } from './world.js';
 
 export function starsForHeat(heat) {
   let stars = 0;
-  for (let i = 0; i < WANTED.starThresholds.length; i++) {
-    if (heat >= WANTED.starThresholds[i]) stars = i;
-  }
+  for (let i = 1; i <= 5; i++) if (heat >= WANTED.starHeat[i]) stars = i;
   return stars;
 }
 
-export function createPolice() {
-  return { cars: [], officers: [], spawnTimer: 0 };
+export function addHeat(game, amount) {
+  game.heat = clamp(game.heat + amount, 0, 520);
+  game.stars = starsForHeat(game.heat);
+}
+
+export function playerAnchor(game) {
+  return game.player.car ? game.player.car.pos : game.player.pos;
+}
+
+export function playerSpeed(game) {
+  return game.player.car ? Math.abs(game.player.car.speed) : game.player.speedNow;
 }
 
 function spawnPoliceCar(game) {
   const anchor = playerAnchor(game);
-  let point = null;
-  for (let tries = 0; tries < 20; tries++) {
-    const p = randomRoadPoint(game.rng, anchor.x, anchor.z, 52);
-    const d = Math.sqrt((p.x - anchor.x) ** 2 + (p.z - anchor.z) ** 2);
-    if (d < 100) {
-      point = p;
-      break;
-    }
-  }
-  if (!point) return;
-  const car = new Car(game.scene, 0xf2f2f2, 'police');
-  car.mode = 'police';
-  const dx = anchor.x - point.x;
-  const dz = anchor.z - point.z;
-  car.place(point.x, point.z, Math.atan2(dx, dz));
+  const p = randomRoadPoint(game.rng, anchor.x, anchor.z, 55);
+  const dx = anchor.x - p.x;
+  const dz = anchor.z - p.z;
+  if (dx * dx + dz * dz > 150 * 150) return false;
+  const car = new Car(game.scene, 0xf0f0ee, 'police');
+  car.role = 'police';
+  car.place(p.x, p.z, Math.atan2(dx, dz));
+  car.officer = null;
+  car.giveUpTimer = 0;
   game.cars.push(car);
   game.police.cars.push(car);
+  return true;
 }
 
 function removePoliceCar(game, car) {
-  game.scene.remove(car.mesh);
+  car.dispose(game.scene);
   game.cars.splice(game.cars.indexOf(car), 1);
   game.police.cars.splice(game.police.cars.indexOf(car), 1);
+  if (car.officer) removeOfficer(game, car.officer);
 }
 
-function spawnOfficer(game, nearCar) {
-  const group = makeHumanoid(game.rng, { shirt: 0x1d2f6e, pants: 0x141c33, skin: undefined });
-  group.position.set(nearCar.pos.x + randRange(game.rng, -2, 2), 0, nearCar.pos.z + randRange(game.rng, -2, 2));
-  game.scene.add(group);
-  game.police.officers.push({ group, phase: randRange(game.rng, 0, 6), car: nearCar });
+function spawnOfficer(game, car) {
+  const h = makeHumanoid({ skin: 0xc68863, shirt: 0x22355e, pants: 0x1a2338 });
+  game.scene.add(h.group);
+  const officer = {
+    h,
+    mesh: h.group,
+    pos: h.group.position,
+    car,
+    phase: Math.random() * 6,
+    facing: car.angle,
+  };
+  officer.pos.set(car.pos.x + 1.8, 0, car.pos.z);
+  car.officer = officer;
+  game.police.officers.push(officer);
+  return officer;
 }
 
 function removeOfficer(game, officer) {
-  game.scene.remove(officer.group);
-  game.police.officers.splice(game.police.officers.indexOf(officer), 1);
+  game.scene.remove(officer.mesh);
+  const i = game.police.officers.indexOf(officer);
+  if (i >= 0) game.police.officers.splice(i, 1);
+  if (officer.car && officer.car.officer === officer) officer.car.officer = null;
 }
 
-// pursuit steering: aim at where the player will be in half a second
-function updatePoliceCar(game, car, dt) {
+function updateOfficer(game, dt, officer) {
   const anchor = playerAnchor(game);
-  const pos = car.pos;
-  const lead = game.player.car ? 0.45 : 0.15;
-  const targetX = anchor.x + (game.player.car ? game.player.car.forward().x * game.player.car.speed * lead : 0);
-  const targetZ = anchor.z + (game.player.car ? game.player.car.forward().z * game.player.car.speed * lead : 0);
-  const dx = targetX - pos.x;
-  const dz = targetZ - pos.z;
-  const dist = Math.sqrt(dx * dx + dz * dz);
-  const desired = Math.atan2(dx, dz);
-  let diff = desired - car.angle;
-  while (diff > Math.PI) diff -= Math.PI * 2;
-  while (diff < -Math.PI) diff += Math.PI * 2;
-  car.angle += clamp(diff, -1.9 * dt, 1.9 * dt);
-  car.steerVis = clamp(diff, -1, 1);
-
-  const topSpeed = 26 + game.stars * 1.6;
-  let targetSpeed = dist < 5 ? 0 : topSpeed;
-  if (Math.abs(diff) > 1.1) targetSpeed = Math.min(targetSpeed, 8);
-  car.speed += clamp(targetSpeed - car.speed, -22 * dt, 10 * dt);
-  const fwd = car.forward();
-  pos.x += fwd.x * car.speed * dt;
-  pos.z += fwd.z * car.speed * dt;
-  collideCircle(game.world, pos, 1.5);
-  car.syncMesh(dt);
-
-  // flash the light bar
-  const bar = car.mesh.userData.lightBar;
-  if (bar) {
-    const phase = Math.floor(game.time * 3) % 2;
-    bar.children[0].visible = phase === 0;
-    bar.children[1].visible = phase === 1;
+  const dx = anchor.x - officer.pos.x;
+  const dz = anchor.z - officer.pos.z;
+  const d = Math.hypot(dx, dz);
+  const pSpeed = playerSpeed(game);
+  // A player who drives off fast is gone: the officer gives up and fades.
+  if (game.player.car && pSpeed > 9 && d > 24) {
+    removeOfficer(game, officer);
+    return;
   }
-
-  // an officer piles out when the car is close and slow
-  if (
-    dist < 13 &&
-    Math.abs(car.speed) < 4 &&
-    game.police.officers.length < game.stars + 1 &&
-    !car.officerOut &&
-    !game.player.car
-  ) {
-    car.officerOut = true;
-    spawnOfficer(game, car);
+  if (d > 85) {
+    removeOfficer(game, officer);
+    return;
   }
-  if (dist > 30) car.officerOut = false;
+  if (d > 1.5) {
+    const speed = 5.7;
+    officer.pos.x += (dx / d) * speed * dt;
+    officer.pos.z += (dz / d) * speed * dt;
+    officer.facing = Math.atan2(dx, dz);
+    officer.mesh.rotation.y = officer.facing;
+    officer.phase += speed * dt * 2.1;
+    animateWalk(officer.h, officer.phase, 1.2);
+  }
+  resolveCollisions(officer.pos, 0.45, game.colliders);
 }
 
-function updateOfficer(game, officer, dt) {
-  const anchor = playerAnchor(game);
-  const pos = officer.group.position;
-  const dx = anchor.x - pos.x;
-  const dz = anchor.z - pos.z;
-  const dist = Math.sqrt(dx * dx + dz * dz);
-  if (dist > 1.4) {
-    const speed = 4.7;
-    pos.x += (dx / dist) * speed * dt;
-    pos.z += (dz / dist) * speed * dt;
-    officer.group.rotation.y = Math.atan2(dx, dz);
-    officer.phase += dt * speed * 3.2;
-    animateWalk(officer.group, officer.phase, 1.5);
-    collideCircle(game.world, pos, 0.4);
-  }
-  return dist;
+export function clearPolice(game) {
+  for (const car of [...game.police.cars]) removePoliceCar(game, car);
+  for (const officer of [...game.police.officers]) removeOfficer(game, officer);
+  game.police.spawnTimer = 0;
+  game.bustedMeter = 0;
 }
 
 export function updatePolice(game, dt) {
   const police = game.police;
   const anchor = playerAnchor(game);
-  game.seenByPolice = false;
-  let nearest = Infinity;
+  const wanted = WANTED.patrolCars[game.stars] || 0;
 
-  // keep the response sized to the star level
-  police.spawnTimer -= dt;
-  const wanted = WANTED.policeByStars[game.stars] || 0;
-  if (game.stars > 0 && police.cars.length < wanted && police.spawnTimer <= 0) {
-    spawnPoliceCar(game);
-    police.spawnTimer = 1.6;
-  }
-  for (let i = police.cars.length - 1; i >= 0; i--) {
-    const car = police.cars[i];
-    if (car.dead) {
-      police.cars.splice(i, 1);
-      continue;
+  // Reinforcements roll in while the stars demand them.
+  if (police.cars.length < wanted) {
+    police.spawnTimer -= dt;
+    if (police.spawnTimer <= 0) {
+      police.spawnTimer = 1.5;
+      spawnPoliceCar(game);
     }
-    const d = Math.sqrt((car.pos.x - anchor.x) ** 2 + (car.pos.z - anchor.z) ** 2);
+  }
+
+  let nearest = Infinity;
+  let seen = false;
+
+  for (const car of [...police.cars]) {
+    const dx = anchor.x - car.pos.x;
+    const dz = anchor.z - car.pos.z;
+    const d = Math.hypot(dx, dz);
     nearest = Math.min(nearest, d);
-    if (d < WANTED.sightRange) game.seenByPolice = true;
-    if ((game.stars === 0 && d > 40) || d > 190) {
+    if (d < 46) seen = true;
+    if (d > 210) {
       removePoliceCar(game, car);
       continue;
     }
-    if (game.stars > 0) updatePoliceCar(game, car, dt);
-    else {
-      // no heat: units peel away and park up
-      car.speed += clamp(0 - car.speed, -10 * dt, 10 * dt);
-      car.syncMesh(dt);
+    if (game.stars === 0) {
+      // The heat is gone: they break off and leave the streets.
+      car.giveUpTimer += dt;
+      car.driveFree(dt, 0.5, clamp(angleDelta(car.angle, Math.atan2(-dx, -dz)) * 1.4, -1, 1), false, 13);
+      if (d > 55 || car.giveUpTimer > 6) removePoliceCar(game, car);
+      continue;
+    }
+    const desired = Math.atan2(dx, dz);
+    const diff = angleDelta(car.angle, desired);
+    let throttle = Math.abs(diff) > 2.2 ? -0.7 : 1;
+    if (d < 5.5) throttle = 0.35;
+    const topSpeed = 23.5 + game.stars * 1.7;
+    car.driveFree(dt, throttle, clamp(diff * 1.7, -1, 1), false, topSpeed);
+
+    // Close and slow with the player on foot: an officer piles out.
+    if (!car.officer && !game.player.car && d < 10 && Math.abs(car.speed) < 5) {
+      spawnOfficer(game, car);
     }
   }
 
-  // officers work on foot; they give up when the heat dies or they fall behind
-  let officerNear = false;
-  for (let i = police.officers.length - 1; i >= 0; i--) {
-    const officer = police.officers[i];
-    const d = updateOfficer(game, officer, dt);
-    if (d < WANTED.sightRange) game.seenByPolice = true;
-    if (d < 2) officerNear = true;
-    if (game.stars === 0 || d > 120) removeOfficer(game, officer);
+  for (const officer of [...police.officers]) {
+    const d = Math.hypot(anchor.x - officer.pos.x, anchor.z - officer.pos.z);
+    nearest = Math.min(nearest, d);
+    if (d < 32) seen = true;
+    updateOfficer(game, dt, officer);
+  }
+  game.nearestPolice = nearest;
+
+  // Out of sight, the heat bleeds away.
+  if (!seen && game.heat > 0) {
+    game.heat = Math.max(0, game.heat - WANTED.coolRate * dt);
+    game.stars = starsForHeat(game.heat);
+    if (game.stars === 0) game.bustedMeter = Math.max(0, game.bustedMeter - dt * 0.5);
   }
 
-  // the busted meter: stand next to the law while wanted and it fills
-  const carNear = game.player.car === null && nearest < 5.5;
-  if (game.stars > 0 && (officerNear || carNear)) {
-    game.bustedMeter = Math.min(1, game.bustedMeter + dt * 0.42);
+  // Cornered and slow with the law at arm's reach: the meter fills.
+  const cornered =
+    game.stars > 0 &&
+    playerSpeed(game) < 2.6 &&
+    (nearestCarDist(game, anchor) < 7.5 || officerDist(game, anchor) < 2.4);
+  if (cornered && game.state === 'playing') {
+    game.bustedMeter = Math.min(1, game.bustedMeter + dt / 1.7);
+    if (game.bustedMeter >= 1) game.onBusted();
   } else {
-    game.bustedMeter = Math.max(0, game.bustedMeter - dt * 0.3);
+    game.bustedMeter = Math.max(0, game.bustedMeter - dt / 1.15);
   }
-  if (game.bustedMeter >= 1) game.onBusted();
+}
 
-  // siren volume follows the nearest unit
-  game.audio.siren(game.stars > 0 && nearest < 80 ? clamp(1 - nearest / 80, 0, 1) : null, dt);
-
-  // wrecked police cars are removed from the response (and remembered)
-  for (const car of [...police.cars]) {
-    if (car.health <= 0 && !car.dead) {
-      wreckCar(car);
-      game.addHeat(24, 'Disabled a police car');
-    }
+function nearestCarDist(game, anchor) {
+  let best = Infinity;
+  for (const car of game.police.cars) {
+    best = Math.min(best, Math.hypot(anchor.x - car.pos.x, anchor.z - car.pos.z));
   }
+  return best;
+}
+
+function officerDist(game, anchor) {
+  let best = Infinity;
+  for (const o of game.police.officers) {
+    best = Math.min(best, Math.hypot(anchor.x - o.pos.x, anchor.z - o.pos.z));
+  }
+  return best;
 }

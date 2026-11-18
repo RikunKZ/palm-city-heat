@@ -1,57 +1,69 @@
-// input.js — keyboard and mouse state for the whole game.
-// Game code reads `keys` (held), consumes one-shot presses via `pressed`,
-// and uses the pointer-lock mouse deltas accumulated each frame.
+// Keyboard and mouse state for the game: held keys, one-frame key presses,
+// mouse movement for the camera, and clicks for punching and dialogue.
 
-export const keys = new Set();
-export const pressed = new Set();
-export const mouse = { dx: 0, dy: 0, down: false, clicked: false };
+export function createInput() {
+  const held = new Set();
+  const pressed = new Set();
+  const input = {
+    held,
+    pressed,
+    mouseDX: 0,
+    mouseDY: 0,
+    clicked: false,
+    pointerLocked: false,
 
-let initialised = false;
-
-export function initInput(canvas) {
-  if (initialised) return;
-  initialised = true;
-
-  window.addEventListener('keydown', (event) => {
-    if (!event.repeat) pressed.add(event.code);
-    keys.add(event.code);
-    if (['ArrowUp', 'ArrowDown', 'Space'].includes(event.code)) event.preventDefault();
-  });
-  window.addEventListener('keyup', (event) => keys.delete(event.code));
-  window.addEventListener('blur', () => {
-    keys.clear();
-    mouse.down = false;
-  });
-
-  canvas.addEventListener('mousedown', (event) => {
-    if (event.button === 0) {
-      mouse.down = true;
-      mouse.clicked = true;
-    }
-  });
-  window.addEventListener('mouseup', (event) => {
-    if (event.button === 0) mouse.down = false;
-  });
-  window.addEventListener('mousemove', (event) => {
-    if (document.pointerLockElement === canvas) {
-      mouse.dx += event.movementX || 0;
-      mouse.dy += event.movementY || 0;
-    }
-  });
-}
-
-export function lockPointer(canvas) {
-  if (document.pointerLockElement !== canvas) canvas.requestPointerLock();
-}
-
-export function unlockPointer() {
-  if (document.pointerLockElement) document.exitPointerLock();
-}
-
-// called once at the end of every frame: one-shot state resets, held state stays
-export function endFrameInput() {
-  pressed.clear();
-  mouse.dx = 0;
-  mouse.dy = 0;
-  mouse.clicked = false;
+    /** True only on the first frame a key goes down. */
+    wasPressed(code) {
+      return pressed.has(code);
+    },
+    isDown(code) {
+      return held.has(code);
+    },
+    /** Call at the end of every frame: clears the one-frame signals. */
+    endFrame() {
+      pressed.clear();
+      input.mouseDX = 0;
+      input.mouseDY = 0;
+      input.clicked = false;
+    },
+    attach(canvas) {
+      window.addEventListener('keydown', (e) => {
+        if (e.repeat) return;
+        held.add(e.code);
+        pressed.add(e.code);
+        if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
+      });
+      window.addEventListener('keyup', (e) => held.delete(e.code));
+      window.addEventListener('blur', () => held.clear());
+      canvas.addEventListener('mousedown', (e) => {
+        if (e.button === 0) input.clicked = true;
+      });
+      window.addEventListener('mousemove', (e) => {
+        if (input.pointerLocked) {
+          input.mouseDX += e.movementX || 0;
+          input.mouseDY += e.movementY || 0;
+        } else if (dragging) {
+          input.mouseDX += e.movementX || 0;
+          input.mouseDY += e.movementY || 0;
+        }
+      });
+      let dragging = false;
+      canvas.addEventListener('mousedown', (e) => {
+        if (e.button === 2) dragging = true;
+      });
+      window.addEventListener('mouseup', (e) => {
+        if (e.button === 2) dragging = false;
+      });
+      canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+      document.addEventListener('pointerlockchange', () => {
+        input.pointerLocked = document.pointerLockElement === canvas;
+      });
+    },
+    lockPointer(canvas) {
+      if (!input.pointerLocked && canvas.requestPointerLock) {
+        canvas.requestPointerLock();
+      }
+    },
+  };
+  return input;
 }
