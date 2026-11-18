@@ -1,0 +1,91 @@
+/* Palm City Heat — HUD and menu styling. Dark glass panels, one gold accent. */
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: #0d1420; }
+body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: #f2f4f6; }
+#app { position: fixed; inset: 0; }
+#app canvas { display: block; }
+
+#hud { position: fixed; inset: 0; pointer-events: none; opacity: 0; transition: opacity 0.3s; }
+#hud.show { opacity: 1; }
+
+#objective {
+  position: absolute; top: 16px; left: 16px; max-width: 430px;
+  background: rgba(10, 16, 24, 0.62); border-left: 3px solid #ffcf4d;
+  padding: 9px 12px; border-radius: 6px; font-size: 15px; line-height: 1.35;
+}
+#topRight { position: absolute; top: 14px; right: 18px; text-align: right; }
+#stars { font-size: 26px; letter-spacing: 3px; color: #ffcf4d; text-shadow: 0 1px 4px rgba(0,0,0,0.6); }
+#cash { font-size: 30px; font-weight: 800; color: #7dd87d; text-shadow: 0 1px 4px rgba(0,0,0,0.65); }
+#respect { font-size: 13px; opacity: 0.85; letter-spacing: 0.4px; }
+
+#bustedWrap {
+  position: absolute; top: 86px; left: 50%; transform: translateX(-50%);
+  width: 300px; text-align: center; opacity: 0; transition: opacity 0.15s;
+}
+#bustedWrap.show { opacity: 1; }
+#bustedWrap span { font-weight: 800; letter-spacing: 4px; color: #ff6b5e; font-size: 15px; }
+#bustedBar { height: 9px; background: rgba(255,255,255,0.18); border-radius: 5px; margin-top: 4px; overflow: hidden; }
+#bustedFill { height: 100%; width: 0; background: #d43a2e; }
+
+#toast {
+  position: absolute; top: 128px; left: 50%; transform: translateX(-50%) translateY(-6px);
+  background: rgba(10, 16, 24, 0.78); border: 1px solid rgba(255, 207, 77, 0.55);
+  padding: 9px 18px; border-radius: 20px; font-size: 15px; opacity: 0; transition: all 0.25s; white-space: nowrap;
+}
+#toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+#bottomLeft { position: absolute; left: 16px; bottom: 16px; }
+#healthBar { width: 190px; height: 10px; background: rgba(255,255,255,0.16); border-radius: 5px; overflow: hidden; margin-bottom: 8px; }
+#healthFill { height: 100%; width: 100%; background: #57c256; transition: width 0.2s; }
+#minimap { width: 190px; height: 190px; display: block; }
+
+#speedo {
+  position: absolute; right: 22px; bottom: 20px; font-size: 30px; font-weight: 800;
+  text-shadow: 0 1px 5px rgba(0,0,0,0.7); opacity: 0; transition: opacity 0.2s;
+}
+#speedo.show { opacity: 1; }
+
+#prompt {
+  position: absolute; left: 50%; bottom: 118px; transform: translateX(-50%);
+  background: rgba(10, 16, 24, 0.7); padding: 7px 16px; border-radius: 16px;
+  font-size: 14.5px; opacity: 0; transition: opacity 0.15s; white-space: nowrap;
+}
+#prompt.show { opacity: 1; }
+
+#dialog {
+  position: absolute; left: 50%; bottom: 26px; transform: translateX(-50%);
+  width: min(620px, 92vw); background: rgba(8, 12, 18, 0.88);
+  border: 1px solid rgba(255, 207, 77, 0.4); border-radius: 10px; padding: 12px 16px 9px;
+  opacity: 0; pointer-events: none; transition: opacity 0.2s;
+}
+#dialog.show { opacity: 1; }
+#dialogName { color: #ffcf4d; font-weight: 800; font-size: 14px; letter-spacing: 0.6px; text-transform: uppercase; }
+#dialogText { font-size: 16.5px; line-height: 1.45; margin-top: 3px; }
+#dialogHint { font-size: 11.5px; opacity: 0.55; margin-top: 6px; text-align: right; }
+
+.screen {
+  position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+  background: linear-gradient(160deg, rgba(9, 18, 32, 0.88), rgba(64, 32, 16, 0.82));
+  z-index: 10;
+}
+.screen.show { display: flex; }
+.panel { max-width: 620px; width: 92vw; text-align: center; padding: 28px 30px; }
+.panel h1 { font-size: 58px; margin: 0 0 6px; letter-spacing: 2px; font-weight: 900; }
+.panel h1 span { color: #ffcf4d; }
+.panel h2 { font-size: 42px; margin: 0 0 6px; letter-spacing: 3px; font-weight: 900; }
+.tagline { font-size: 16.5px; line-height: 1.5; opacity: 0.92; }
+.buttons { display: flex; gap: 12px; justify-content: center; margin: 20px 0 22px; flex-wrap: wrap; }
+.buttons button {
+  pointer-events: auto; cursor: pointer; border: 0; border-radius: 8px;
+  background: #ffcf4d; color: #1a1405; font-size: 17px; font-weight: 800;
+  padding: 12px 26px; letter-spacing: 0.4px;
+}
+.buttons button:hover { background: #ffd970; }
+#btnContinue, #btnRestart { background: rgba(255,255,255,0.14); color: #f2f4f6; border: 1px solid rgba(255,255,255,0.35); }
+.controls {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 6px 18px; text-align: left;
+  font-size: 14px; background: rgba(255,255,255,0.06); border-radius: 10px; padding: 14px 18px;
+}
+.controls b { color: #ffcf4d; }
+.fineprint { font-size: 12px; opacity: 0.6; margin-top: 16px; line-height: 1.5; }

@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Palm City Heat — an open-world crime game</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="./style.css">
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.min.js" } }
+</script>
+</head>
+<body>
+<div id="app" aria-label="Palm City Heat game view"></div>
+
+<div id="hud">
+  <div id="objective"></div>
+  <div id="topRight">
+    <div id="stars">☆☆☆☆☆</div>
+    <div id="cash">$250</div>
+    <div id="respect">Respect 0</div>
+  </div>
+  <div id="bustedWrap"><span>BUSTED</span><div id="bustedBar"><div id="bustedFill"></div></div></div>
+  <div id="toast"></div>
+  <div id="bottomLeft">
+    <div id="healthBar"><div id="healthFill"></div></div>
+    <canvas id="minimap" width="190" height="190"></canvas>
+  </div>
+  <div id="speedo"></div>
+  <div id="prompt"></div>
+  <div id="dialog">
+    <div id="dialogName">Rosa</div>
+    <div id="dialogText"></div>
+    <div id="dialogHint">E / click — continue</div>
+  </div>
+</div>
+
+<div id="startScreen" class="screen show">
+  <div class="panel">
+    <h1>PALM CITY <span>HEAT</span></h1>
+    <p class="tagline">An open-world crime story in a sun-baked coastal city. Steal cars, run jobs, dodge the PCPD — and never owe Rosa money again.</p>
+    <div class="buttons">
+      <button id="btnNew" type="button">New game</button>
+      <button id="btnContinue" type="button">Continue</button>
+    </div>
+    <div class="controls">
+      <div><b>W A S D</b> move / drive</div>
+      <div><b>Mouse</b> look (click the game to capture)</div>
+      <div><b>E</b> enter / exit car · talk</div>
+      <div><b>Click / F</b> punch</div>
+      <div><b>Shift</b> sprint · <b>Space</b> jump / handbrake</div>
+      <div><b>P</b> pause · progress saves automatically</div>
+    </div>
+    <p class="fineprint">Palm City Heat is an original work: its city, people, cars and story are its own. Built with three.js, vendored in this folder — the game runs fully offline.</p>
+  </div>
+</div>
+
+<div id="pauseMenu" class="screen">
+  <div class="panel">
+    <h2>Paused</h2>
+    <p class="tagline">Your progress is saved.</p>
+    <div class="buttons">
+      <button id="btnResume" type="button">Resume</button>
+      <button id="btnRestart" type="button">Restart story</button>
+    </div>
+  </div>
+</div>
+
+<div id="endScreen" class="screen">
+  <div class="panel">
+    <h2 id="endTitle">BUSTED</h2>
+    <p class="tagline" id="endText"></p>
+    <div class="buttons">
+      <button id="btnRespawn" type="button">Back to the city</button>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
