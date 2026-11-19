@@ -1,446 +1,356 @@
-// The story of Palm City Heat: five missions with their own people and
-// dialogue, then honest delivery work forever. Missions are data — steps
-// the manager walks the player through with a beacon and an objective line.
+// Palm City Heat — the story: five missions with original characters and
+// dialogue, then endless delivery work. This class owns the mission state
+// machine, the dialogue box data, the world markers (a gold beacon, cash
+// bags, checkpoint rings) and the giver NPCs who stand at their places.
+
 import * as THREE from 'three';
 import { PLACES } from './config.js';
-import { addHeat } from './police.js';
-import { makeHumanoid } from './pedestrians.js';
-import { Car } from './vehicles.js';
+import { buildFigure } from './pedestrians.js';
 
-export const GIVERS = {
-  rosa: { place: 'rosa', name: 'Rosa', colors: { skin: 0x8a5a3b, shirt: 0xd84f35, pants: 0x2c3550 } },
-  benny: { place: 'benny', name: 'Benny', colors: { skin: 0x6e4426, shirt: 0x707880, pants: 0x22262b } },
-  ilya: { place: 'pier', name: 'Captain Ilya', colors: { skin: 0xe8b98d, shirt: 0x2e7fb8, pants: 0xd8d8d8 } },
-};
+function markerSprite(text, color) {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(64, 64, 52, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#14100a';
+  ctx.font = 'bold 84px Arial';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, 64, 70);
+  const tex = new THREE.CanvasTexture(c);
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
+  s.scale.setScalar(2.2);
+  s.renderOrder = 20;
+  return s;
+}
 
-export const STORY = [
-  {
-    id: 'errand',
-    title: "Rosa's Errand",
-    giver: 'rosa',
-    intro: [
-      { who: 'Rosa', text: 'Reno! You owe me three weeks of noodles, so today you work.' },
-      { who: 'Rosa', text: 'The Night Market has my moon peppers. Fetch them before the lunch crowd and the debt is history.' },
-      { who: 'Reno', text: 'Peppers. Life or death stuff. On it.' },
-    ],
-    steps: [
-      { type: 'pickup', at: 'market', r: 4.5, label: 'Pick up the moon peppers at the Night Market' },
-      { type: 'return', at: 'rosa', r: 5, label: 'Bring the peppers back to Rosa' },
-    ],
-    outro: [{ who: 'Rosa', text: 'Still warm. You might be worth the noodles after all.' }],
-    reward: { cash: 180, respect: 10 },
-  },
-  {
-    id: 'sunset',
-    title: 'Borrowed Sunset',
-    giver: 'benny',
-    intro: [
-      { who: 'Benny', text: 'Reno, I need hands I can half-trust. A Sunset GT sits at Hotel Solana — its owner owes me storage.' },
-      { who: 'Benny', text: 'Bring her to my shop. In one piece. Mostly one piece.' },
-    ],
-    steps: [
-      { type: 'enterCar', label: 'Take the Sunset GT at Hotel Solana' },
-      { type: 'deliverCar', at: 'benny', r: 8.5, label: "Deliver the Sunset GT to Benny's" },
-    ],
-    outro: [{ who: 'Benny', text: 'She purrs. Storage is paid — and a little extra for the driver.' }],
-    reward: { cash: 260, respect: 15 },
-  },
-  {
-    id: 'bags',
-    title: 'Three Bags',
-    giver: 'rosa',
-    intro: [
-      { who: 'Rosa', text: 'Three bags of my money never reached the bank. Long story. Short version: find them.' },
-      { who: 'Rosa', text: 'One by the beach umbrellas, one behind the Old Cannery, one in the market alley. Bring them home.' },
-    ],
-    steps: [
-      { type: 'pickup', at: 'beach', r: 4.5, label: 'Find the bag at Solana Beach' },
-      { type: 'pickup', at: 'cannery', r: 4.5, label: 'Find the bag behind the Old Cannery' },
-      { type: 'pickup', at: 'alley', r: 4.5, label: 'Find the bag in the market alley' },
-      { type: 'return', at: 'rosa', r: 5, label: 'Bring the bags back to Rosa' },
-    ],
-    outro: [{ who: 'Rosa', text: 'Every last note. The city provides, Reno.' }],
-    reward: { cash: 340, respect: 20 },
-  },
-  {
-    id: 'cooldown',
-    title: 'Cool Down',
-    giver: 'rosa',
-    intro: [
-      { who: 'Rosa', text: 'A detective has been asking questions about my delivery boy. Lose the heat — all of it — and stay lost.' },
-      { who: 'Reno', text: 'So, one quiet drive around the block, then.' },
-    ],
-    steps: [{ type: 'escape', label: 'Lose the police — get your heat to zero', time: 150 }],
-    outro: [{ who: 'Rosa', text: 'Nobody saw a thing. As usual.' }],
-    reward: { cash: 300, respect: 25 },
-  },
-  {
-    id: 'harbour',
-    title: 'Harbour Run',
-    giver: 'ilya',
-    intro: [
-      { who: 'Captain Ilya', text: 'The Harbour Run, Reno. Six lights around the city, then home to my pier before the tide clock runs out.' },
-      { who: 'Captain Ilya', text: 'Everyone talks about the run. Almost nobody finishes it.' },
-    ],
-    steps: [
-      {
-        type: 'checkpoints',
-        label: 'Run the Harbour Run checkpoints',
-        time: 170,
-        points: [
-          { x: 0, z: -216 },
-          { x: -216, z: -72 },
-          { x: -144, z: 144 },
-          { x: 72, z: 216 },
-          { x: 216, z: 72 },
-          { x: 272, z: -84 },
-        ],
-      },
-    ],
-    outro: [{ who: 'Captain Ilya', text: 'Finished — and the car still has all its corners. The harbour respects that.' }],
-    reward: { cash: 500, respect: 40 },
-  },
+const ROSA_LINES_1 = [
+  ['Rosa', 'You! Yes, you with the hungry face. I am Rosa. My noodles feed half this city, and today the city is winning.'],
+  ['Rosa', 'The Night Market is holding my moon peppers hostage — some paperwork nonsense. You look like paperwork is not your style.'],
+  ['Rosa', 'Fetch the crate from the market stall, then take it to the Hotel Solana kitchen door. Their chef is desperate, and desperate chefs tip.'],
+  ['You', 'Consider it done, Rosa.'],
+];
+const ROSA_LINES_1_DONE = [
+  ['Rosa', 'Peppers delivered, chef happy, and my soup stays legendary. You are good people.'],
+];
+const BENNY_LINES = [
+  ['Benny', 'Benny. Benny\'s Auto. You have the look of someone who borrows cars professionally.'],
+  ['Benny', 'A customer left a Sunset GT by the pier and "forgot" where. Orange, loud, impossible to miss.'],
+  ['Benny', 'Bring her to my shop — gently, she is worth more than this building. There is money in it for you.'],
+  ['You', 'One gently borrowed sunset, coming up.'],
+];
+const ROSA_LINES_3 = [
+  ['Rosa', 'My cousin Lito moves cash for the market stalls, and Lito has lost THREE bags of it. Do not ask how. Lito is a poet, not a courier.'],
+  ['Rosa', 'One by the Coral Mall, one near the Hideout, one down the boardwalk. The bags are green. Bring them back to me and the stalls eat again.'],
+  ['You', 'Three green bags. On it.'],
+];
+const BENNY_LINES_4 = [
+  ['Benny', 'Word is the PD thinks you are a myth. Let us help them believe harder — then vanish.'],
+  ['Benny', 'I may have mentioned your name near a patrol radio. Repeatedly. You have about ten seconds before this gets loud.'],
+  ['Benny', 'Get them interested, then lose them completely. Break their line of sight and let the heat die. Do that and the whole street owes you.'],
+  ['You', 'You are a terrible friend, Benny.'],
+  ['Benny', 'I am an excellent friend with terrible hobbies. Run!'],
+];
+const MARINA_LINES = [
+  ['Marina', 'I run the Palm Pier ferry desk. The harbour master needs the tide ledger at the pier office, and the harbour is a whole city away today.'],
+  ['Marina', 'Follow the gold rings, every one, and finish here at the pier before the clock dies. The ledger rides with you — drive like the tide is chasing.'],
+  ['You', 'Rings, clock, pier. Got it.'],
 ];
 
-// Loose points a step can name besides the PLACES keys.
-const EXTRA_POINTS = {
-  cannery: { x: -196, z: -206 },
-  alley: { x: -168, z: -152 },
-};
+export class Missions {
+  constructor(scene, hooks) {
+    this.scene = scene;
+    this.hooks = hooks; // { toast, reward(cash, respect), addHeat, spawnMissionCar, jingle }
+    this.story = 0;      // next story mission index, 0..5
+    this.active = null;  // { id, stage, data }
+    this.dialogue = null;
+    this.dialogueDone = null;
+    this.deliveriesDone = 0;
 
-export function stepPoint(step) {
-  if (!step.at) return null;
-  return PLACES[step.at] || EXTRA_POINTS[step.at] || null;
-}
-
-// ---------------------------------------------------------------- manager
-
-export function createMissions(game) {
-  const state = {
-    active: null, // the mission definition being run
-    stepIndex: 0,
-    checkpointIndex: 0,
-    timer: 0,
-    job: null, // { phase: 'pickup'|'deliver', fromKey, toKey, pay }
-    sunsetCar: null,
-    giverNpcs: {},
-  };
-
-  // The beacon: a column of gold light and a ring on the ground.
-  const beacon = new THREE.Mesh(
-    new THREE.CylinderGeometry(1.5, 1.5, 24, 18, 1, true),
-    new THREE.MeshBasicMaterial({ color: 0xffcf4d, transparent: true, opacity: 0.16, side: THREE.DoubleSide, depthWrite: false }),
-  );
-  beacon.position.y = 12;
-  beacon.visible = false;
-  game.scene.add(beacon);
-  const ring = new THREE.Mesh(
-    new THREE.RingGeometry(2.4, 3.1, 28),
-    new THREE.MeshBasicMaterial({ color: 0xffcf4d, transparent: true, opacity: 0.75, side: THREE.DoubleSide, depthWrite: false }),
-  );
-  ring.rotation.x = -Math.PI / 2;
-  ring.position.y = 0.06;
-  ring.visible = false;
-  game.scene.add(ring);
-  state.beacon = beacon;
-  state.ring = ring;
-
-  // The thing to fetch: a small green money bag / parcel that bobs and spins.
-  const parcel = new THREE.Mesh(
-    new THREE.BoxGeometry(0.72, 0.55, 0.72),
-    new THREE.MeshLambertMaterial({ color: 0x3f9e4f }),
-  );
-  parcel.visible = false;
-  game.scene.add(parcel);
-  state.parcel = parcel;
-
-  // A drive-through ring for the checkpoint run.
-  const gate = new THREE.Mesh(
-    new THREE.TorusGeometry(3.4, 0.24, 10, 26),
-    new THREE.MeshBasicMaterial({ color: 0xffcf4d }),
-  );
-  gate.visible = false;
-  game.scene.add(gate);
-  state.gate = gate;
-
-  // The givers stand at their places, waiting to be talked to.
-  for (const [key, giver] of Object.entries(GIVERS)) {
-    const h = makeHumanoid(giver.colors);
-    const place = PLACES[giver.place];
-    h.group.position.set(place.x + 2.5, 0, place.z + 3.5);
-    h.group.rotation.y = Math.PI * 0.8;
-    game.scene.add(h.group);
-    state.giverNpcs[key] = h;
-  }
-  return state;
-}
-
-export function currentStep(game) {
-  const m = game.missions;
-  if (!m.active) return null;
-  return m.active.steps[m.stepIndex] || null;
-}
-
-/** Where the objective points right now: {x, z, label} or null. */
-export function currentTarget(game) {
-  const m = game.missions;
-  const step = currentStep(game);
-  if (step) {
-    if (step.type === 'escape') return null;
-    if (step.type === 'enterCar') {
-      return m.sunsetCar ? { x: m.sunsetCar.pos.x, z: m.sunsetCar.pos.z, label: step.label } : null;
+    // Giver NPCs.
+    this.givers = {};
+    const defs = [
+      ['rosa', PLACES.noodles, 0xd84315],
+      ['benny', PLACES.auto, 0x1565c0],
+      ['marina', PLACES.pier, 0x00838f],
+    ];
+    for (const [key, place, color] of defs) {
+      const fig = buildFigure({ shirt: color, pants: 0x37474f, skin: 0xc68642, hat: null });
+      fig.position.set(place.x + 3, 0, place.z + 6);
+      fig.rotation.y = -0.6;
+      scene.add(fig);
+      const mark = markerSprite('!', '#ffd23e');
+      mark.position.set(place.x + 3, 2.9, place.z + 6);
+      scene.add(mark);
+      this.givers[key] = { fig, mark, place };
     }
-    if (step.type === 'checkpoints') {
-      const p = step.points[m.checkpointIndex];
-      return p ? { x: p.x, z: p.z, label: `${step.label} (${m.checkpointIndex + 1}/${step.points.length})` } : null;
-    }
-    const p = stepPoint(step);
-    return p ? { x: p.x, z: p.z, label: step.label } : null;
-  }
-  if (m.job) {
-    const key = m.job.phase === 'pickup' ? m.job.fromKey : m.job.toKey;
-    const p = PLACES[key];
-    return { x: p.x, z: p.z, label: m.job.phase === 'pickup' ? `Pick up a package at ${PLACES[key].name}` : `Deliver the package to ${PLACES[key].name}` };
-  }
-  // Idle: point at whoever has work.
-  if (!game.save.storyDone) {
-    const def = STORY[game.save.storyIndex];
-    if (def) {
-      const giver = GIVERS[def.giver];
-      const p = PLACES[giver.place];
-      return { x: p.x, z: p.z, label: `Go to ${p.name} — "${def.title}"` };
-    }
-  }
-  const p = PLACES.rosa;
-  return { x: p.x, z: p.z, label: "Pick up delivery work at Rosa's" };
-}
 
-/** The giver the player is close enough to talk to, or null. */
-export function nearbyGiver(game) {
-  if (game.player.car || game.missions.active) return null;
-  const p = game.player.pos;
-  for (const [key, giver] of Object.entries(GIVERS)) {
-    const place = PLACES[giver.place];
-    const dx = p.x - place.x;
-    const dz = p.z - place.z;
-    if (dx * dx + dz * dz < 5.2 * 5.2) return { key, giver };
-  }
-  return null;
-}
-
-export function startDialog(game, lines, onDone) {
-  game.dialog = { lines, index: 0, onDone: onDone || null };
-  game.dialogActive = true;
-}
-
-export function advanceDialog(game) {
-  const d = game.dialog;
-  if (!d) return;
-  game.audio.blip();
-  d.index++;
-  if (d.index >= d.lines.length) {
-    game.dialog = null;
-    game.dialogActive = false;
-    if (d.onDone) d.onDone();
-  }
-}
-
-/** Talk to a giver: start the next story mission, or hand out a job. */
-export function talkToGiver(game, giverKey) {
-  const m = game.missions;
-  if (!game.save.storyDone) {
-    const def = STORY[game.save.storyIndex];
-    if (def && def.giver === giverKey) {
-      startDialog(game, [{ who: 'Mission', text: def.title }, ...def.intro], () => beginMission(game, def));
-      return;
-    }
-  }
-  if (giverKey === 'rosa' && game.save.storyDone && !m.job) {
-    const keys = Object.keys(PLACES).filter((k) => k !== 'rosa');
-    const fromKey = keys[Math.floor(game.rng() * keys.length)];
-    let toKey = keys[Math.floor(game.rng() * keys.length)];
-    if (toKey === fromKey) toKey = keys[(keys.indexOf(fromKey) + 3) % keys.length];
-    const a = PLACES[fromKey];
-    const b = PLACES[toKey];
-    const pay = Math.round(80 + Math.hypot(a.x - b.x, a.z - b.z) * 0.35);
-    startDialog(
-      game,
-      [{ who: 'Rosa', text: `Package waiting at ${a.name}, bound for ${b.name}. $${pay} if it arrives in one piece.` }],
-      () => {
-        m.job = { phase: 'pickup', fromKey, toKey, pay };
-        game.toast(`Delivery job: $${pay}`);
-      },
+    // The shared gold beacon that marks the current objective.
+    this.beacon = new THREE.Mesh(
+      new THREE.CylinderGeometry(1.1, 1.1, 34, 12, 1, true),
+      new THREE.MeshBasicMaterial({ color: 0xffd23e, transparent: true, opacity: 0.3, side: THREE.DoubleSide, depthWrite: false }),
     );
-    return;
-  }
-  const name = GIVERS[giverKey].name;
-  startDialog(game, [{ who: name, text: 'Nothing for you right now, Reno. Rosa keeps the work in this city.' }], null);
-}
+    this.beacon.visible = false;
+    scene.add(this.beacon);
 
-function beginMission(game, def) {
-  const m = game.missions;
-  m.active = def;
-  m.stepIndex = 0;
-  m.checkpointIndex = 0;
-  const step = currentStep(game);
-  m.timer = step && step.time ? step.time : 0;
-  if (def.id === 'sunset') {
-    const car = new Car(game.scene, 0xe07b26, 'sport');
-    car.place(186, 92, -Math.PI / 2);
-    car.role = 'parked';
-    m.sunsetCar = car;
-    game.cars.push(car);
+    this.bags = [];
+    this.ring = new THREE.Mesh(
+      new THREE.TorusGeometry(5, 0.45, 10, 28),
+      new THREE.MeshBasicMaterial({ color: 0xffd23e, transparent: true, opacity: 0.85 }),
+    );
+    this.ring.visible = false;
+    scene.add(this.ring);
+    this.time = 0;
   }
-  if (def.id === 'cooldown') addHeat(game, 150);
-  game.toast(`Mission: ${def.title}`);
-  game.audio.jingle(true);
-}
 
-export function failMission(game, reason) {
-  const m = game.missions;
-  if (!m.active) return;
-  game.toast(reason);
-  game.audio.jingle(false);
-  if (m.sunsetCar && m.sunsetCar.role === 'parked') {
-    m.sunsetCar.dispose(game.scene);
-    game.cars.splice(game.cars.indexOf(m.sunsetCar), 1);
+  giverForStory() {
+    return ['rosa', 'benny', 'rosa', 'benny', 'marina'][this.story] ?? null;
   }
-  m.sunsetCar = null;
-  m.active = null;
-  m.stepIndex = 0;
-  m.checkpointIndex = 0;
-  m.timer = 0;
-}
 
-function completeMission(game) {
-  const m = game.missions;
-  const def = m.active;
-  game.cash += def.reward.cash;
-  game.respect += def.reward.respect;
-  game.save.storyIndex++;
-  if (game.save.storyIndex >= STORY.length) game.save.storyDone = true;
-  game.saveProgress();
-  m.active = null;
-  m.stepIndex = 0;
-  m.sunsetCar = null;
-  game.audio.jingle(true);
-  game.toast(`Mission complete: ${def.title} — +$${def.reward.cash}, +${def.reward.respect} respect`);
-  if (game.save.storyDone) game.toast('The story is done. Rosa always has delivery work.');
-}
-
-function advanceStep(game) {
-  const m = game.missions;
-  m.stepIndex++;
-  m.checkpointIndex = 0;
-  const step = currentStep(game);
-  if (!step) {
-    // The walk is over: the outro plays, then the rewards land.
-    const def = m.active;
-    startDialog(game, def.outro, () => completeMission(game));
-    return;
+  /** Talk to a giver: returns true when a dialogue opened. */
+  tryTalk(playerPos) {
+    if (this.dialogue || this.active) return false;
+    const key = this.giverForStory();
+    if (!key) return false;
+    const g = this.givers[key];
+    if (playerPos.distanceTo(g.fig.position) > 3.4) return false;
+    const lines = [ROSA_LINES_1, BENNY_LINES, ROSA_LINES_3, BENNY_LINES_4, MARINA_LINES][this.story];
+    this.startDialogue(lines, () => this.beginStoryMission());
+    return true;
   }
-  m.timer = step.time ? step.time : 0;
-  if (step.type === 'escape') addHeat(game, 0); // already hot from the intro
-  game.audio.blip();
-}
 
-export function updateMissions(game, dt) {
-  const m = game.missions;
-  const target = currentTarget(game);
-  const step = currentStep(game);
+  startDialogue(lines, onDone) {
+    this.dialogue = { lines, i: 0 };
+    this.dialogueDone = onDone;
+  }
 
-  // Beacon, ring and parcel follow the current target.
-  const showBeacon = !!target && !game.dialogActive;
-  m.beacon.visible = showBeacon;
-  m.ring.visible = showBeacon;
-  if (target) {
-    m.beacon.position.x = target.x;
-    m.beacon.position.z = target.z;
-    m.beacon.material.opacity = 0.13 + Math.sin(game.time * 3) * 0.05;
-    m.ring.position.x = target.x;
-    m.ring.position.z = target.z;
-    const s = 1 + Math.sin(game.time * 3) * 0.08;
-    m.ring.scale.setScalar(s);
+  get dialogueLine() {
+    if (!this.dialogue) return null;
+    const [who, text] = this.dialogue.lines[this.dialogue.i];
+    return { who, text };
   }
-  const showParcel = step && step.type === 'pickup';
-  m.parcel.visible = !!showParcel;
-  if (showParcel) {
-    const p = stepPoint(step);
-    m.parcel.position.set(p.x, 0.9 + Math.sin(game.time * 2.4) * 0.18, p.z);
-    m.parcel.rotation.y = game.time * 1.4;
-  }
-  const showGate = step && step.type === 'checkpoints';
-  m.gate.visible = !!showGate;
-  if (showGate) {
-    const p = step.points[m.checkpointIndex];
-    if (p) {
-      m.gate.position.set(p.x, 2.6 + Math.sin(game.time * 2) * 0.3, p.z);
-      m.gate.rotation.y = game.time * 0.7;
+
+  advanceDialogue() {
+    if (!this.dialogue) return;
+    this.dialogue.i++;
+    if (this.dialogue.i >= this.dialogue.lines.length) {
+      this.dialogue = null;
+      const done = this.dialogueDone;
+      this.dialogueDone = null;
+      done?.();
     }
   }
-  if (game.dialogActive || game.state !== 'playing') return;
 
-  const anchor = game.player.car ? game.player.car.pos : game.player.pos;
+  beginStoryMission() {
+    const id = this.story;
+    if (id === 0) {
+      this.active = { id, stage: 'pickup', target: PLACES.market };
+      this.hooks.toast('Mission: Rosa\'s Errand');
+    } else if (id === 1) {
+      const car = this.hooks.spawnMissionCar(272, 26, -Math.PI / 2);
+      this.active = { id, stage: 'find', target: null, car };
+      this.hooks.toast('Mission: Borrowed Sunset');
+    } else if (id === 2) {
+      const spots = [
+        { x: -150, z: -118 }, { x: 82, z: 92 }, { x: 330, z: 118 },
+      ];
+      this.bags = spots.map((s) => {
+        const bag = new THREE.Mesh(
+          new THREE.SphereGeometry(0.55, 10, 8),
+          new THREE.MeshLambertMaterial({ color: 0x2e7d32 }),
+        );
+        bag.scale.y = 0.75;
+        bag.position.set(s.x, 0.45, s.z);
+        this.scene.add(bag);
+        return { mesh: bag, taken: false };
+      });
+      this.active = { id, stage: 'collect', count: 0 };
+      this.hooks.toast('Mission: Three Bags');
+    } else if (id === 3) {
+      this.active = { id, stage: 'escape', peaked: false };
+      this.hooks.addHeat(64);
+      this.hooks.toast('Mission: Cool Down — lose the heat!');
+    } else if (id === 4) {
+      this.active = {
+        id, stage: 'run', step: 0, timer: 170,
+        points: [
+          { x: 180, z: 186 }, { x: -96, z: 200 }, { x: -186, z: -46 },
+          { x: 66, z: -186 }, { x: PLACES.pier.x, z: PLACES.pier.z },
+        ],
+      };
+      this.hooks.toast('Mission: Harbour Run');
+    }
+  }
 
-  // Job pickups and deliveries resolve at their places.
-  if (m.job) {
-    const key = m.job.phase === 'pickup' ? m.job.fromKey : m.job.toKey;
-    const p = PLACES[key];
-    const d2 = (anchor.x - p.x) ** 2 + (anchor.z - p.z) ** 2;
-    if (d2 < 6 * 6) {
-      if (m.job.phase === 'pickup') {
-        m.job.phase = 'deliver';
-        game.audio.blip();
-        game.toast('Package on board');
-      } else {
-        game.cash += m.job.pay;
-        game.save.jobsDone++;
-        game.saveProgress();
-        game.audio.jingle(true);
-        game.toast(`Delivered — +$${m.job.pay}`);
-        m.job = null;
+  startDelivery() {
+    const keys = Object.keys(PLACES);
+    const from = PLACES[keys[Math.floor(Math.random() * keys.length)]];
+    let to = from;
+    while (to === from) to = PLACES[keys[Math.floor(Math.random() * keys.length)]];
+    this.active = { id: 'delivery', stage: 'pickup', from, to };
+    this.hooks.toast(`Delivery: collect at ${from.name}`);
+  }
+
+  completeMission(cash, respect, lines) {
+    this.hooks.reward(cash, respect);
+    this.hooks.jingle(true);
+    if (lines) this.startDialogue(lines, null);
+    if (this.active && this.active.id !== 'delivery') this.story++;
+    if (this.active && this.active.id === 'delivery') this.deliveriesDone++;
+    this.active = null;
+    this.clearProps();
+  }
+
+  failMission(why) {
+    if (!this.active) return;
+    this.hooks.toast(`Mission failed: ${why}`);
+    this.hooks.jingle(false);
+    this.active = null;
+    this.clearProps();
+  }
+
+  onPlayerDown() {
+    if (this.active) this.failMission('you went down');
+  }
+
+  clearProps() {
+    for (const b of this.bags) this.scene.remove(b.mesh);
+    this.bags = [];
+    this.ring.visible = false;
+  }
+
+  /** What the HUD shows: title, text, target point and timer (or nulls). */
+  objective() {
+    const a = this.active;
+    if (this.dialogue) return { title: 'Talking', text: 'Hear them out', target: null, timer: null };
+    if (!a) {
+      if (this.story < 5) {
+        const g = this.givers[this.giverForStory()];
+        return { title: 'Story', text: `Talk to your contact at ${g.place.name}`, target: g.fig.position, timer: null };
       }
+      return { title: 'Free roam', text: 'Palm City is yours — deliveries pay at any marker', target: null, timer: null };
     }
-    return;
+    switch (a.id) {
+      case 0:
+        return a.stage === 'pickup'
+          ? { title: 'Rosa\'s Errand', text: 'Pick up the pepper crate at the Night Market', target: a.target, timer: null }
+          : { title: 'Rosa\'s Errand', text: 'Deliver the crate to Hotel Solana', target: PLACES.hotel, timer: null };
+      case 1:
+        return a.stage === 'find'
+          ? { title: 'Borrowed Sunset', text: 'Find the orange Sunset GT near the pier', target: a.car.pos, timer: null }
+          : { title: 'Borrowed Sunset', text: 'Drive the Sunset GT to Benny\'s Auto', target: PLACES.auto, timer: null };
+      case 2: {
+        const left = this.bags.filter((b) => !b.taken);
+        if (a.stage === 'collect') {
+          return { title: 'Three Bags', text: `Recover the cash bags (${a.count}/3)`, target: left.length ? left[0].mesh.position : null, timer: null };
+        }
+        return { title: 'Three Bags', text: 'Bring the bags back to Rosa', target: this.givers.rosa.fig.position, timer: null };
+      }
+      case 3:
+        return { title: 'Cool Down', text: 'Break police line of sight and let the heat die', target: null, timer: null };
+      case 4: {
+        const p = a.points[a.step];
+        return { title: 'Harbour Run', text: `Checkpoint ${a.step + 1} of ${a.points.length}`, target: p, timer: a.timer };
+      }
+      default:
+        return a.stage === 'pickup'
+          ? { title: 'Delivery', text: `Collect the parcel at ${a.from.name}`, target: a.from, timer: null }
+          : { title: 'Delivery', text: `Deliver to ${a.to.name}`, target: a.to, timer: null };
+    }
   }
-  if (!step) return;
 
-  // Timers: the escape and the Harbour Run can both run out.
-  if (step.time) {
-    m.timer -= dt;
-    if (m.timer <= 0) {
-      failMission(game, step.type === 'escape' ? 'Too slow — the detective got a good look.' : 'The tide clock ran out. The run is off.');
-      return;
+  update(dt, ctx) {
+    this.time += dt;
+    const { playerPos, drivingCar, police } = ctx;
+    // Giver markers: only the current contact glows.
+    const key = this.giverForStory();
+    for (const [k, g] of Object.entries(this.givers)) {
+      g.mark.visible = !this.active && !this.dialogue && k === key && this.story < 5;
+      g.mark.position.y = 2.9 + Math.sin(this.time * 2.4) * 0.18;
     }
-  }
 
-  if (step.type === 'pickup' || step.type === 'return') {
-    const p = stepPoint(step);
-    const d2 = (anchor.x - p.x) ** 2 + (anchor.z - p.z) ** 2;
-    const arrived = step.type === 'pickup' ? d2 < step.r * step.r : d2 < step.r * step.r && !game.player.car;
-    if (arrived) {
-      if (step.type === 'pickup') game.audio.coin();
-      advanceStep(game);
+    const obj = this.objective();
+    if (obj.target) {
+      this.beacon.visible = true;
+      this.beacon.position.set(obj.target.x, 17, obj.target.z);
+      this.beacon.material.opacity = 0.22 + Math.sin(this.time * 3) * 0.08;
+    } else {
+      this.beacon.visible = false;
     }
-  } else if (step.type === 'enterCar') {
-    if (m.sunsetCar && game.player.car === m.sunsetCar) advanceStep(game);
-    if (m.sunsetCar && m.sunsetCar.dead) failMission(game, 'The Sunset GT is wrecked. Benny will not be pleased.');
-  } else if (step.type === 'deliverCar') {
-    const p = stepPoint(step);
-    const d2 = (anchor.x - p.x) ** 2 + (anchor.z - p.z) ** 2;
-    if (game.player.car === m.sunsetCar && d2 < step.r * step.r) advanceStep(game);
-    if (m.sunsetCar && m.sunsetCar.dead) failMission(game, 'The Sunset GT is wrecked. Benny will not be pleased.');
-  } else if (step.type === 'escape') {
-    if (game.heat <= 0 && game.stars === 0) advanceStep(game);
-  } else if (step.type === 'checkpoints') {
-    const p = step.points[m.checkpointIndex];
-    if (p) {
-      const d2 = (anchor.x - p.x) ** 2 + (anchor.z - p.z) ** 2;
-      if (d2 < 8 * 8) {
-        m.checkpointIndex++;
-        game.audio.blip();
-        if (m.checkpointIndex >= step.points.length) advanceStep(game);
-        else game.toast(`Checkpoint ${m.checkpointIndex}/${step.points.length}`);
+
+    const a = this.active;
+    if (!a || this.dialogue) return;
+    const near = (p, r) => Math.hypot(playerPos.x - p.x, playerPos.z - p.z) < r;
+
+    if (a.id === 0) {
+      if (a.stage === 'pickup' && near(PLACES.market, 7.5)) {
+        a.stage = 'deliver';
+        this.hooks.toast('Crate collected');
+        this.hooks.blip();
+      } else if (a.stage === 'deliver' && near(PLACES.hotel, 8)) {
+        this.completeMission(120, 10, ROSA_LINES_1_DONE);
+      }
+    } else if (a.id === 1) {
+      if (a.stage === 'find' && drivingCar === a.car) {
+        a.stage = 'deliver';
+        this.hooks.toast('Got the GT — take it to Benny\'s');
+      } else if (a.stage === 'deliver' && drivingCar === a.car && near(PLACES.auto, 11)) {
+        this.completeMission(200, 12, [['Benny', 'Not a scratch. You are wasted on honest work, friend.']]);
+      } else if (a.car.damage >= 1) {
+        this.failMission('the Sunset GT is wrecked');
+      }
+    } else if (a.id === 2) {
+      if (a.stage === 'collect') {
+        for (const b of this.bags) {
+          if (!b.taken && near(b.mesh.position, 2.4)) {
+            b.taken = true;
+            this.scene.remove(b.mesh);
+            a.count++;
+            this.hooks.toast(`Bag recovered (${a.count}/3)`);
+            this.hooks.blip();
+            if (a.count >= 3) a.stage = 'return';
+          }
+        }
+      } else if (a.stage === 'return' && near(this.givers.rosa.fig.position, 3.6)) {
+        this.completeMission(260, 14, [['Rosa', 'All three! The stalls eat, Lito lives, and you — you I feed free forever.']]);
+      }
+    } else if (a.id === 3) {
+      if (police.stars >= 3) a.peaked = true;
+      if (a.peaked && police.stars === 0) {
+        this.completeMission(300, 16, [['Benny', 'Gone like a rumour. The street is talking about you now.']]);
+      }
+    } else if (a.id === 4) {
+      const p = a.points[a.step];
+      this.ring.visible = true;
+      this.ring.position.set(p.x, 2.6, p.z);
+      this.ring.rotation.x = 0;
+      a.timer -= dt;
+      if (a.timer <= 0) {
+        this.failMission('out of time');
+        return;
+      }
+      if (near(p, 9.5)) {
+        this.hooks.blip();
+        a.step++;
+        a.timer += 12;
+        if (a.step >= a.points.length) {
+          this.completeMission(400, 20, [['Marina', 'Ledger delivered, and with minutes to spare. The harbour owes you.']]);
+        } else {
+          this.hooks.toast(`Checkpoint ${a.step} cleared — bonus time!`);
+        }
+      }
+    } else if (a.id === 'delivery') {
+      if (a.stage === 'pickup' && near(a.from, 7.5)) {
+        a.stage = 'deliver';
+        this.hooks.toast(`Parcel aboard — deliver to ${a.to.name}`);
+        this.hooks.blip();
+      } else if (a.stage === 'deliver' && near(a.to, 8)) {
+        const pay = 45 + Math.round(Math.hypot(a.from.x - a.to.x, a.from.z - a.to.z) / 5);
+        this.completeMission(pay, 3, null);
+        this.startDelivery();
       }
     }
   }

@@ -1,44 +1,47 @@
-// A tiny static file server for playing Palm City Heat locally.
-// Usage: node serve.ts [--port 8080] — then open http://localhost:8080
+// Palm City Heat — tiny static file server for local play.
+//
+//   node serve.ts            serves game/ on http://localhost:8080
+//   PORT=9000 node serve.ts  serves on another port
+//
+// Node standard library only; no build step, no dependencies.
+
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
-import { extname, join, normalize } from 'node:path';
+import { dirname, extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const root = join(fileURLToPath(new URL('.', import.meta.url)), 'game');
-const portArg = process.argv.indexOf('--port');
-const port = portArg >= 0 ? Number(process.argv[portArg + 1]) : 8080;
+const root = join(dirname(fileURLToPath(import.meta.url)), 'game');
+const port = Number(process.env.PORT ?? 8080);
 
-const TYPES = {
+const types: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
+  '.mjs': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
-  '.json': 'application/json',
+  '.json': 'application/json; charset=utf-8',
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
   '.svg': 'image/svg+xml',
-  '.ico': 'image/x-icon',
+  '.wasm': 'application/wasm',
 };
 
 const server = createServer(async (req, res) => {
   try {
-    const url = new URL(req.url || '/', 'http://localhost');
-    let path = normalize(decodeURIComponent(url.pathname));
-    if (path === '/' || path === '\\') path = '/index.html';
+    const url = new URL(req.url ?? '/', 'http://localhost');
+    let path = normalize(decodeURIComponent(url.pathname)).replace(/^[/\\]+/, '');
+    if (path === '' || path === '.') path = 'index.html';
     const file = join(root, path);
-    if (!file.startsWith(root)) {
-      res.writeHead(403);
-      res.end('forbidden');
-      return;
-    }
+    if (!file.startsWith(root)) throw new Error('outside root');
     const data = await readFile(file);
-    res.writeHead(200, { 'content-type': TYPES[extname(file)] || 'application/octet-stream' });
+    res.writeHead(200, { 'content-type': types[extname(file).toLowerCase()] ?? 'application/octet-stream' });
     res.end(data);
   } catch {
-    res.writeHead(404);
+    res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
     res.end('not found');
   }
 });
+
 server.listen(port, () => {
-  console.log(`Palm City Heat at http://localhost:${port}`);
+  console.log(`Palm City Heat is serving at http://localhost:${port}`);
 });

@@ -1,61 +1,43 @@
-// Palm City Heat — shared tuning: the city grid, the named places, the wanted ladder.
-// Everything in the game reads its numbers from here so the world stays consistent.
+// Palm City Heat — shared configuration: the city grid, named places and the
+// wanted ladder. Every module reads its numbers from here so the world the
+// world-builder makes is the world the AI drives on.
 
-// Roads run along these coordinates on both axes: seven avenues each way,
-// which leaves a 6 by 6 field of city blocks between them.
-export const ROAD_LINES = [-216, -144, -72, 0, 72, 144, 216];
-export const ROAD_HALF = 9; // half the width of a road, kerb to centre line
-export const BLOCK_INSET = 13; // buildings keep this far from a block's centre lines
-export const WORLD_HALF = 252; // the last kerb: east of here the promenade starts
-export const PROMENADE_X = 234; // boardwalk band between the coast road and the sand
-export const SAND_X = 256; // dry sand begins
-export const SEA_X = 292; // open water begins
+// Roads run along both axes at these coordinates; blocks sit between them.
+export const ROAD_LINES = [-270, -180, -90, 0, 90, 180, 270];
+export const ROAD_HALF = 7;          // half the road width, in metres
+export const SIDEWALK = 3.2;         // sidewalk width beyond the road edge
+export const CITY_EDGE = 315;        // buildings stop here; beach begins
+export const BOARDWALK_X = 336;      // boardwalk centre line on the east side
+export const SAND_X = 352;           // waterline: sea beyond this x
+export const WORLD_LIMIT = 430;      // hard play boundary
 
-// The named places of Palm City: where they stand, what their sign says, who works there.
+// Named places. x/z are on the ground beside the place's sign; the world
+// builder puts a building or stall there and the missions point at them.
 export const PLACES = {
-  rosa: { x: 240, z: 18, name: "Rosa's Noodle Harbor", short: 'Rosa', color: 0xd84f35 },
-  pier: { x: 272, z: -84, name: 'Palm Pier', short: 'the Pier', color: 0x2e7fb8 },
-  market: { x: -160, z: -160, name: 'Night Market', short: 'the Night Market', color: 0xb03a8c },
-  benny: { x: -160, z: 92, name: "Benny's Auto Works", short: "Benny's", color: 0xe08a1e },
-  police: { x: 92, z: -92, name: 'Palm City Police', short: 'the police station', color: 0x2b4d9b },
-  hospital: { x: -92, z: 92, name: 'Coral Bay Hospital', short: 'the hospital', color: 0xd8d8d8 },
-  hotel: { x: 196, z: 92, name: 'Hotel Solana', short: 'Hotel Solana', color: 0xcaa64b },
-  mall: { x: 92, z: 164, name: 'Coral Mall', short: 'Coral Mall', color: 0x3f9e8f },
-  hideout: { x: -196, z: -196, name: 'Old Cannery', short: 'the Old Cannery', color: 0x707880 },
-  beach: { x: 246, z: 150, name: 'Solana Beach', short: 'the beach', color: 0xe3cf9e },
+  noodles:  { name: "Rosa's Noodles",  short: 'Noodles',  x: -256, z: -196, color: 0xff7043 },
+  auto:     { name: "Benny's Auto",    short: 'Auto',     x: -76,  z: 256,  color: 0x42a5f5 },
+  market:   { name: 'Night Market',    short: 'Market',   x: 106,  z: -256, color: 0xab47bc },
+  police:   { name: 'Palm City PD',    short: 'PD',       x: -256, z: 76,   color: 0x3d5afe },
+  hospital: { name: 'St. Coral Hospital', short: 'Hospital', x: 166, z: 166, color: 0xef5350 },
+  hotel:    { name: 'Hotel Solana',    short: 'Hotel',    x: 256,  z: -76,  color: 0xffca28 },
+  mall:     { name: 'Coral Mall',      short: 'Mall',     x: -166, z: -166, color: 0x26a69a },
+  pier:     { name: 'Palm Pier',       short: 'Pier',     x: 336,  z: 0,    color: 0x8d6e63 },
+  hideout:  { name: 'The Hideout',     short: 'Hideout',  x: 76,   z: 106,  color: 0x78909c },
 };
 
-// Wanted ladder: the heat score at which each star lights, and how many
-// patrol cars the city sends out while that star is lit.
-export const WANTED = {
-  starHeat: [0, 25, 70, 140, 240, 380],
-  patrolCars: [0, 2, 3, 4, 6, 8],
-  coolRate: 9, // heat per second shed while no officer can see the player
-  fineBase: 100,
-  finePerStar: 75,
-  hospitalFee: 150,
-};
+// Wanted ladder: heat thresholds for 1..5 stars, and how many patrol cars
+// the city fields at each level.
+export const STAR_THRESHOLDS = [12, 32, 52, 72, 90];
+export const PATROL_CARS = [0, 1, 2, 3, 4, 5];
+export const HEAT_MAX = 100;
 
-// What each crime adds to the heat score the moment it happens.
-export const CRIMES = {
-  carTheft: 12,
-  punchPed: 8,
-  hitPedWithCar: 16,
-  hitCar: 5,
-  hitBuilding: 3,
-  punchCar: 4,
-};
-
-export const PLAYER = {
-  walkSpeed: 6.2,
-  sprintSpeed: 9.6,
-  turnRate: 11,
-  jumpSpeed: 8.4,
-  gravity: 22,
-  punchRange: 2.1,
-  punchDamage: 34,
-  startCash: 250,
-  startHealth: 100,
+// Heat paid for each crime, keyed by crime name.
+export const CRIME_HEAT = {
+  theft: 22,
+  hitCar: 9,
+  hitPed: 16,
+  punchPed: 12,
+  reckless: 4,
 };
 
 export const SAVE_KEY = 'palm-city-heat-save-v1';

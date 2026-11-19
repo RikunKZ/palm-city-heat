@@ -3,64 +3,75 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Palm City Heat — an open-world crime game</title>
+<title>Palm City Heat</title>
 <link rel="icon" href="data:,">
-<link rel="stylesheet" href="./style.css">
+<link rel="stylesheet" href="style.css">
 <script type="importmap">
 { "imports": { "three": "./vendor/three.module.min.js" } }
 </script>
 </head>
 <body>
-<canvas id="game"></canvas>
+<canvas id="gl"></canvas>
 
-<div id="hud">
-  <div id="objective"></div>
-  <div id="timer"></div>
-  <div id="stats">
-    <div id="stars">☆☆☆☆☆</div>
+<div id="hud" class="hidden">
+  <div id="objective-box">
+    <div id="objective-title">Free roam</div>
+    <div id="objective-text">Explore Palm City</div>
+    <div id="objective-dist"></div>
+    <div id="objective-timer" class="hidden"></div>
+  </div>
+
+  <div id="stats-box">
+    <div id="stars" aria-label="wanted level"></div>
     <div id="cash">$0</div>
     <div id="respect">Respect 0</div>
-    <div id="bustedWrap"><span>BUSTED</span><div id="bustedBar"><div id="bustedFill"></div></div></div>
   </div>
-  <div id="healthWrap"><div id="healthFill"></div></div>
-  <canvas id="minimap" width="176" height="176"></canvas>
-  <div id="speedo"></div>
-  <div id="prompt"></div>
+
+  <div id="busted-box" class="hidden">
+    <div class="busted-label">BUSTED</div>
+    <div id="busted-bar"><div id="busted-fill"></div></div>
+  </div>
+
+  <div id="bottom-left">
+    <div id="health-bar"><div id="health-fill"></div></div>
+    <div id="mode-label">ON FOOT</div>
+  </div>
+
+  <div id="bottom-right">
+    <canvas id="minimap" width="190" height="190"></canvas>
+    <div id="speedo" class="hidden"><span id="speed">0</span><small>km/h</small></div>
+  </div>
+
+  <div id="prompt" class="hidden"></div>
   <div id="toasts"></div>
-  <div id="dialog">
-    <div id="dialogWho">ROSA</div>
-    <div id="dialogText"></div>
-    <div id="dialogHint">E / click — continue</div>
+
+  <div id="dialogue" class="hidden">
+    <div id="dialogue-who"></div>
+    <div id="dialogue-text"></div>
+    <div id="dialogue-hint">E / click ▸</div>
   </div>
 </div>
 
-<div id="menu" class="overlay">
-  <div class="panel">
-    <h1>PALM CITY <span>HEAT</span></h1>
-    <p class="tagline">One courier. One coastal city. Every debt comes due.</p>
-    <button id="btnNew">New Game</button>
-    <button id="btnContinue">Continue</button>
-    <div class="controls">
-      <p><b>WASD</b> move / drive &nbsp;·&nbsp; <b>Mouse</b> look (click the game to lock it)</p>
-      <p><b>E</b> talk / steal car / exit &nbsp;·&nbsp; <b>Shift</b> sprint &nbsp;·&nbsp; <b>Space</b> jump / handbrake</p>
-      <p><b>Click or F</b> punch &nbsp;·&nbsp; <b>P</b> pause</p>
-    </div>
-  </div>
+<div id="menu" class="screen">
+  <h1 class="logo">PALM CITY <span>HEAT</span></h1>
+  <p class="tagline">One city. Five stars. Your move.</p>
+  <button id="btn-new" class="menu-btn">New Game</button>
+  <button id="btn-continue" class="menu-btn">Continue</button>
+  <p class="controls-note">WASD move · mouse camera · Shift sprint · Space jump / handbrake<br>
+  E talk &amp; enter car · F or click punch · P pause</p>
 </div>
 
-<div id="pauseMenu" class="overlay">
-  <div class="panel">
-    <h2>Paused</h2>
-    <button id="btnResume">Resume</button>
-    <button id="btnQuitToMenu">Quit to Menu</button>
-  </div>
+<div id="pause" class="screen hidden">
+  <h1 class="logo small">PAUSED</h1>
+  <button id="btn-resume" class="menu-btn">Resume</button>
+  <button id="btn-quit" class="menu-btn">Save &amp; Quit to Menu</button>
 </div>
 
-<div id="endCard">
-  <div id="endTitle">BUSTED</div>
-  <div id="endSub"></div>
+<div id="banner" class="screen hidden">
+  <h1 id="banner-title" class="logo">BUSTED</h1>
+  <p id="banner-text" class="tagline"></p>
 </div>
 
-<script type="module" src="./src/main.js"></script>
+<script type="module" src="src/main.js"></script>
 </body>
 </html>

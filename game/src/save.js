@@ -1,16 +1,8 @@
-// The save file: cash, respect and story progress in localStorage, so a
-// player can close the tab and pick the city up where they left it.
-import { SAVE_KEY, PLAYER } from './config.js';
+// Palm City Heat — localStorage persistence: cash, respect, story progress
+// and where the player left off. Deliberately forgiving: a corrupt or
+// missing save simply means a fresh game.
 
-export function defaultSave() {
-  return {
-    cash: PLAYER.startCash,
-    respect: 0,
-    storyIndex: 0, // the next story mission to offer; 5 means the story is done
-    storyDone: false,
-    jobsDone: 0,
-  };
-}
+import { SAVE_KEY } from './config.js';
 
 export function loadSave() {
   try {
@@ -18,24 +10,32 @@ export function loadSave() {
     if (!raw) return null;
     const data = JSON.parse(raw);
     if (typeof data !== 'object' || data === null) return null;
-    return { ...defaultSave(), ...data };
+    return {
+      cash: Number(data.cash) || 0,
+      respect: Number(data.respect) || 0,
+      story: Number(data.story) || 0,
+      x: Number(data.x) || 0,
+      z: Number(data.z) || 0,
+    };
   } catch {
     return null;
   }
 }
 
-export function storeSave(data) {
+export function storeSave(state) {
   try {
-    localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+    localStorage.setItem(SAVE_KEY, JSON.stringify({
+      cash: Math.round(state.cash),
+      respect: Math.round(state.respect),
+      story: state.story,
+      x: Math.round(state.x),
+      z: Math.round(state.z),
+    }));
   } catch {
-    // A browser that refuses storage just loses the save; the game goes on.
+    // Storage full or blocked: the game simply will not persist.
   }
 }
 
 export function clearSave() {
-  try {
-    localStorage.removeItem(SAVE_KEY);
-  } catch {
-    // Nothing to clear.
-  }
+  try { localStorage.removeItem(SAVE_KEY); } catch { /* ignore */ }
 }
